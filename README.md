@@ -1,22 +1,16 @@
 # install
 
-get latest version of python (>3.8)
-get chromedriver.exe (https://chromedriver.chromium.org/) and add it to PATH
-
-```
-$ pip install selenium
-$ pip install beautifulsoup4
-```
+1. get latest version of python (>3.8)
+2. get chromedriver.exe (https://chromedriver.chromium.org/) and add it to PATH
+3. `pip install selenium`
+4. `pip install beautifulsoup4`
 
 # running
 
-edit config.py and add your reddit username and password
-warning: it could crash chrome, so save important stuff first
-warning: it may take a while to start because each driver needs to login first
-
-```
-$ python main.py
-```
+1. edit config.py and add your reddit username and password
+2. warning: it could crash chrome, so save important stuff first
+3. warning: it may take a while to start because each driver needs to login first
+4. `python main.py`
 
 # expected output
 
