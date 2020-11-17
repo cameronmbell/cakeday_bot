@@ -1,5 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor as thread_pool_executor
 from concurrent.futures import wait
+from threading import Lock as lock
 
 from queue import Queue as queue
 
@@ -32,17 +33,23 @@ def user_worker(thread_queue, user_queue):
             
             user_queue.put(user, block=True)
 
-def reply_worker(user_queue, done_set):
+def reply_worker(user_queue, done_set, done_lock):
     driver = actions.make_driver()
 
     while True:
         user = user_queue.get(block=True)
 
-        if user not in done_set:
+        done_lock.acquire()
+        not_contained = user not in done_set
+        done_lock.release()
+        
+        if no_contained:    
             if actions.wish_user_cakeday(driver, user):
+                done_lock.acquire()
                 done_set.add(user)
-
                 helper.write_db(config.users_file, done_set)
+                done_lock.release()
+                
             else:
                 helper.thread_safe_print(f'messaging user "{user}" failed, re-queueing')
                 
@@ -52,6 +59,7 @@ if __name__ == '__main__':
     thread_queue = queue() # threads to be searched
     user_queue = queue() # users with a cakeday to spam 
     done_set = set() # users who have already been wished a happy cake day
+    done_lock = lock() # lock to prevent race conditions when accessing done_set
 
     try:
         done_set = helper.read_db(config.users_file)
@@ -64,11 +72,9 @@ if __name__ == '__main__':
     with thread_pool_executor() as executor:
         futures = []
 
-        futures.append(executor.submit(thread_worker, thread_queue))
-        futures.append(executor.submit(reply_worker, user_queue, set(done_set)))
-
-        for _ in range(config.search_thread_count):
-            futures.append(executor.submit(user_worker, thread_queue, user_queue))
+        futures.extend([executor.submit(thread_worker, thread_queue) for _ in range(config.finder_thread_count)])
+        futures.extend([executor.submit(user_worker, thread_queue, user_queue) for _ in range(config.search_thread_count)])
+        futures.extend([executor.submit(reply_worker, user_queue, done_set, done_lock) for _ in range(config.reply_thread_count)])
 
         not_done = futures
 

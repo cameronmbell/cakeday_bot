@@ -35,10 +35,9 @@ def find_cakes(driver, thread):
             try:
                 found.add(username[0].get_text())
             except:
-                raise
                 
                 # the community cake day will trigger this, ignore it
-                # pass
+                pass
 
         return found
 
@@ -204,7 +203,7 @@ def login(driver):
     try:
         until(driver, ec.title_contains('front page of the internet'))
     except:
-        assert 'login failed'
+        helper.thread_safe_print('login failed, is the username/password in config.py correct?')
         driver.quit()
 
 def make_driver():
