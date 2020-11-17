@@ -66,9 +66,6 @@ if __name__ == '__main__':
     done_set = set() # users who have already been wished a happy cake day
     done_lock = lock() # lock to prevent race conditions when accessing done_set
 
-    for u in 'Irrelaphant turkishlightning snoodlerdink ready6ixgo ZaviersJustice Beerspaz12 Gerf93 Deathbysnusnubooboo anrwlias silentsnip94 BananaDick_CuntGrass'.split(' '):
-        user_queue.put(u)
-
     try:
         done_set = helper.read_db(config.users_file)
 
