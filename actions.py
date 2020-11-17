@@ -12,7 +12,10 @@ from selenium.common.exceptions import StaleElementReferenceException
 from selenium.common.exceptions import TimeoutException
 from selenium.common.exceptions import UnexpectedAlertPresentException
 from selenium.common.exceptions import WebDriverException
+from selenium.common.exceptions import NoSuchElementException
 from bs4 import BeautifulSoup as beautiful_soup
+
+from collections import namedtuple
 
 import random
 import helper
@@ -93,33 +96,47 @@ def wish_user_cakeday(driver, user):
     serviced_ids = set()
 
     # find all reply buttons
+    user_post_object = namedtuple('user_post_object', ['id', 'date', 'karma', 'reply_elem'])
+    
     try:
-        reply_buttons = until(driver, helper.any_elements_clickable((by.XPATH, "//button[text()='Reply']")))
+        user_posts = []
+
+        for reply_button in until(driver, helper.any_elements_clickable((by.XPATH, "//button[text()='Reply']"))):
+
+            # extract info from comment
+            post_id_elem = reply_button.find_element_by_xpath(".//ancestor::*[contains(@class,'Comment')]")
+            date = post_id_elem.find_element_by_xpath("..//descendant::a[contains(@id,'Created')]").text
+            karma = 0
+
+            try:
+                karma = int(post_id_elem.find_element_by_xpath("..//descendant::span[contains(text(),'point')]").text.split(' ')[0])
+            except:
+                pass # occurs for /r/politics because of 'Score hidden'
+
+            if 'minute' in date or 'hour' in date:
+                user_posts.append(user_post_object(post_id_elem.get_attribute('class')[8:], date, karma, reply_button))
+
+        # sort via heuristic
+        user_posts.sort(key=lambda _: _.karma, reverse=True)
+
+        helper.thread_safe_print(f' after sorting, {user} posts are: {user_posts}')
+            
     except TimeoutException:
         return False # re-queue this user
+    except StaleElementReferenceException:
+        return False # re-queue this user
     
-    for reply_button in reply_buttons:
+    for post in user_posts:
         if len(serviced_ids) >= config.user_post_limit:
             break
 
-        try:
-            post_id_elem = reply_button.find_element_by_xpath(".//ancestor::*[contains(@class,'Comment')]")
-            post_date_elem = post_id_elem.find_element_by_xpath("..//descendant::a[contains(@id,'Created')]")
-            post_reply_elem = post_id_elem.find_element_by_xpath(".//button[text()='Reply']")
-        except StaleElementReferenceException:
-            return False # re-queue this user
-
-        # extract info
-        post_id = post_id_elem.get_attribute('class')[8:]
-        post_date = post_date_elem.text
-
         # check that the date lines up
-        if post_id not in serviced_ids and ('minute' in post_date or 'hour' in post_date):
-            helper.thread_safe_print(f'replying to post "{post_id}" made {post_date} by user {user}')
+        if post.id not in serviced_ids:
+            helper.thread_safe_print(f'replying to post "{post.id}" made {post.date} by user {user}')
             
             try:
                 # reply to post
-                helper.js_click_elem(driver, post_reply_elem)
+                helper.js_click_elem(driver, post.reply_elem)
 
                 reply_box = until(driver, ec.element_to_be_clickable(
                     (by.CSS_SELECTOR, 'div[contenteditable="true"]')), config.reply_timeout)
@@ -147,7 +164,7 @@ def wish_user_cakeday(driver, user):
                 driver.back()
                 
             else:
-                serviced_ids.add(post_id)
+                serviced_ids.add(post.id)
 
         try:
             helper.js_scroll(driver, '150')

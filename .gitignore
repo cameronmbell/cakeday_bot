@@ -2,3 +2,4 @@ __pycache__/
 config/chrome_user_data/
 config/firefox_user_data/
 config/users.pickle
+debug.log

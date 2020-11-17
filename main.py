@@ -4,6 +4,8 @@ from threading import Lock as lock
 
 from queue import Queue as queue
 
+import time
+
 import actions
 import traceback
 import config
@@ -13,6 +15,9 @@ def thread_worker(thread_queue):
     driver = actions.make_driver()
     
     for subreddit in config.subreddits:
+        while thread_queue.qsize() >= config.thread_queue_limit:
+            time.sleep(config.driver_timeout)
+        
         helper.thread_safe_print(f'scraping r/{subreddit}')
         
         for t in actions.scrape_thread(driver, subreddit):
@@ -43,7 +48,7 @@ def reply_worker(user_queue, done_set, done_lock):
         not_contained = user not in done_set
         done_lock.release()
         
-        if no_contained:    
+        if not_contained:    
             if actions.wish_user_cakeday(driver, user):
                 done_lock.acquire()
                 done_set.add(user)
@@ -61,12 +66,14 @@ if __name__ == '__main__':
     done_set = set() # users who have already been wished a happy cake day
     done_lock = lock() # lock to prevent race conditions when accessing done_set
 
+    for u in 'Irrelaphant turkishlightning snoodlerdink ready6ixgo ZaviersJustice Beerspaz12 Gerf93 Deathbysnusnubooboo anrwlias silentsnip94 BananaDick_CuntGrass'.split(' '):
+        user_queue.put(u)
+
     try:
         done_set = helper.read_db(config.users_file)
 
         helper.thread_safe_print(f'loaded {len(done_set)} users from db')
-            
-    except EOFError:
+    except (EOFError, FileNotFoundError):
         helper.thread_safe_print('db was empty, creating new')
         
     with thread_pool_executor() as executor:
