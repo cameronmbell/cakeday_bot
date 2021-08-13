@@ -20,6 +20,7 @@ from collections import namedtuple
 import random
 import helper
 import config
+import time
 
 def until(driver, what, timeout=config.driver_timeout):
     return web_driver_wait(driver, timeout).until(what)
@@ -32,7 +33,7 @@ def find_cakes(driver, thread):
         # check if cake day
         # this is pretty crap bc it re-searches the thread over and over
         # ideally it should only search subelements of the 'more replies' button
-        for cake in soup.select('svg[id*="cakeday"]'):
+        for cake in soup.select('img[alt*="Cake day"]'):
             username = cake.parent.select('a[href*="/user/"]')
 
             try:
@@ -118,8 +119,6 @@ def wish_user_cakeday(driver, user):
 
         # sort via heuristic
         user_posts.sort(key=lambda _: _.karma, reverse=True)
-
-        helper.thread_safe_print(f' after sorting, {user} posts are: {user_posts}')
             
     except TimeoutException:
         return False # re-queue this user
@@ -130,43 +129,55 @@ def wish_user_cakeday(driver, user):
         if len(serviced_ids) >= config.user_post_limit:
             break
 
-        # check that the date lines up
-        if post.id not in serviced_ids:
-            helper.thread_safe_print(f'replying to post "{post.id}" made {post.date} by user {user}')
-            
-            try:
-                # reply to post
-                helper.js_click_elem(driver, post.reply_elem)
-
-                reply_box = until(driver, ec.element_to_be_clickable(
-                    (by.CSS_SELECTOR, 'div[contenteditable="true"]')), config.reply_timeout)
-
-                helper.js_scroll_to(driver, reply_box)
-                helper.js_click_elem(driver, reply_box)
-                
-                reply_box.send_keys(random.choice(config.phrases))
-
-                if config.safe_mode:
-                    reply_box.send_keys(keys.CONTROL + 'a')
-                    reply_box.send_keys(keys.BACKSPACE)
-
-                submit_box = until(driver, ec.element_to_be_clickable((by.CSS_SELECTOR, 'button[type="submit"]')))
-                
-                helper.js_click_elem(driver, submit_box)
-
-                # test if it has submitted by waiting until reply box disappears
-                if until(driver, ec.staleness_of(reply_box), config.reply_timeout):
-                    driver.back()
-                    
-            except TimeoutException:
-                helper.thread_safe_print('reply timed out, passing')
-
-                driver.back()
-                
-            else:
-                serviced_ids.add(post.id)
-
         try:
+            # check that the date lines up
+            if post.id not in serviced_ids:
+                helper.thread_safe_print(f'replying to post "{post.id}" made {post.date} by user {user}')
+                
+                try:
+                    # reply to post
+                    helper.js_click_elem(driver, post.reply_elem)
+
+                    reply_box = until(driver, ec.element_to_be_clickable(
+                        (by.CSS_SELECTOR, 'div[contenteditable="true"]')), config.reply_timeout)
+
+                    helper.js_scroll_to(driver, reply_box)
+                    helper.js_click_elem(driver, reply_box)
+                    
+                    reply_box.send_keys(random.choice(config.phrases))
+
+                    if config.safe_mode:
+                        reply_box.send_keys(keys.CONTROL + 'a')
+                        reply_box.send_keys(keys.BACKSPACE)
+
+                    submit_box = until(driver, ec.element_to_be_clickable((by.CSS_SELECTOR, 'button[type="submit"]')))
+                    
+                    helper.js_click_elem(driver, submit_box)
+
+                    # test if it has submitted by waiting until reply box disappears
+                    if until(driver, ec.staleness_of(reply_box), config.reply_timeout):
+                        driver.back()
+                        
+                except TimeoutException:
+                    helper.thread_safe_print('reply timed out, passing')
+
+                    driver.back()
+
+                except StaleElementReferenceException:
+                    helper.thread_safe_print('reply was stale, passing')
+
+                    driver.back()
+
+                except UnexpectedAlertPresentException as e:
+                    helper.thread_safe_print('unexpected alert, passing')
+                    
+                    driver.back()
+
+                    raise e
+                    
+                else:
+                    serviced_ids.add(post.id)
+
             helper.js_scroll(driver, '150')
 
         # will not scroll if alert is present
@@ -218,13 +229,17 @@ def login(driver):
 
     # wait for login to succeed
     try:
-        until(driver, ec.title_contains('front page of the internet'))
+        until(driver, ec.title_contains('Dive into anything'))
     except:
         helper.thread_safe_print('login failed, is the username/password in config.py correct?')
         driver.quit()
 
 def make_driver():
     driver = None
+
+    if config.use_proxy and config.browser != 'chrome':
+        raise Exception(f'proxy only supported in chrome')
+
 
     if config.browser == 'chrome':
         _chrome_options = chrome_options()
@@ -236,15 +251,22 @@ def make_driver():
         _chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])
         _chrome_options.add_experimental_option('prefs', {
             'prefs': {'intl.accept_languages': 'en,en-US'},
-            'profile.default_content_setting_values.notifications' : 2})
-
+            'profile.default_content_setting_values.notifications' : 2,
+            'profile.managed_default_content_settings.images': 2})
         #_chrome_options.add_argument(f"user-data-dir={config.chrome_profile_path}")
+
+        if config.use_proxy:
+            host, port, protocol = config.proxy_list[0]
+
+            _chrome_options.add_argument(f"--proxy-server={protocol}://{host}:{port}")
+
+            helper.thread_safe_print(f'using proxy: {protocol}://{host}:{port}')
 
         if config.headless:
             _chrome_options.add_argument("--start-maximized")
             _chrome_options.add_argument("--headless")
 
-        driver = webdriver.Chrome(options=_chrome_options)
+        driver = webdriver.Chrome(executable_path=config.chrome_driver, options=_chrome_options)
     elif config.browser == 'firefox':
         _firefox_profile = FirefoxProfile(config.firefox_profile_path)
         _firefox_options = firefox_options()
