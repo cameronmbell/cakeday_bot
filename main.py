@@ -66,20 +66,6 @@ if __name__ == '__main__':
     done_set = set() # users who have already been wished a happy cake day
     done_lock = lock() # lock to prevent race conditions when accessing done_set
 
-    user_queue.put("Sesse_Alleheim")
-    user_queue.put("Sconechompsky")
-    user_queue.put("elwahrio")
-    user_queue.put("Spirited_Figure_1991")
-    user_queue.put("LittleTest8026")
-    user_queue.put("Silvertheprophecy")
-    user_queue.put("RedSunWuKong")
-    user_queue.put("miss_rx7")
-    user_queue.put("penguinwitharms")
-    user_queue.put("bobnobjob")
-    user_queue.put("Betatester87")
-    user_queue.put("zoentri")
-    user_queue.put("SnooMuffins4964")
-
     try:
         done_set = helper.read_db(config.users_file)
 
